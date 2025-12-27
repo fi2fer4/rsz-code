@@ -15,6 +15,10 @@ start_lat = data.GPS.Pos(1,1);
 start_lon = data.GPS.Pos(1,2);
 start_alt = data.GPS.Pos(1,3);
 
+% Prevod lat/lon do metru
+scale_x = 111132;                 % m / deg (lat)
+scale_y = 111132 * cosd(start_lat);% 
+
 % --- INICIALIZÁCIA ---
 x = zeros(16, 1);
 x(7) = 1; % Kvaternión [1 0 0 0] (qw, qx, qy, qz)
@@ -37,12 +41,16 @@ Q = diag([1e-5 1e-5 1e-5, ...       % Poloha
           
 % Matica R (Šum merania GPS)
 var_gps_pos = data.GPS.Var_Pos(1);
-R_gps = diag([var_gps_pos, var_gps_pos, var_gps_pos*2, 0.2, 0.2, 0.2]);
+R_gps = diag([var_gps_pos*scale_x^2, var_gps_pos*scale_y^2, var_gps_pos*2, 0.2, 0.2, 0.2]);
 % size(R_gps)
 % return; debug #2 chronologicky
 % Logovanie
 log_pos = zeros(N, 3);
 log_euler = zeros(N, 3);
+% normalizovane residuum (ciste pro debug)
+% nis = zeros(N,1);
+% nis_pos = zeros(N,1);
+% nis_vel = zeros(N,1);
 
 fprintf('Spúšťam 16-stavový EKF s plným Jacobiánom F...\n');
 
@@ -165,11 +173,17 @@ for k = 1:N
     lon = data.GPS.Pos(k,2);
     alt = data.GPS.Pos(k,3);
     
-    gps_x = (lat - start_lat) * 111132;
-    gps_y = (lon - start_lon) * 111132 * cosd(start_lat);
+    gps_x = (lat - start_lat) * scale_x;
+    gps_y = (lon - start_lon) * scale_y;
     gps_z = alt - start_alt;
     
-    Z = [gps_x; gps_y; gps_z; data.GPS.Spd(k); 0; data.GPS.VZ(k)];
+    % FIX: spatne zadana rychlost
+    % data.GPS.Spd(k) - velikost rychlosti
+    % data.GPS.GCRs(k) - smer (deg)
+    course = data.GPS.GCRs(k);
+    vx = data.GPS.Spd(k) * cosd(course); 
+    vy = data.GPS.Spd(k) * sind(course); 
+    Z = [gps_x; gps_y; gps_z; vx; vy; data.GPS.VZ(k)];
     
     % Matica H (6x16)
     H = zeros(6, 16);
@@ -186,6 +200,19 @@ for k = 1:N
     y_res = Z - H * x_pred;
     x_new = x_pred + K * y_res;
     
+
+    % debug
+    % pos_res = y_res(1:3);
+    % vel_res = y_res(4:6);
+    % nis(k) = y_res' / S * y_res;
+    % y = y_res;
+    % Spos = S(1:3,1:3);   ypos = y(1:3);
+    % Svel = S(4:6,4:6);   yvel = y(4:6);
+    % 
+    % nis_pos(k) = ypos' / Spos * ypos;   % ~3
+    % nis_vel(k) = yvel' / Svel * yvel;
+
+
     % Update P
     P = (eye(16) - K * H) * P;
     
