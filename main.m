@@ -1,21 +1,24 @@
 clc; clear; close all;
 load('hodnoty.mat');   % MUSÍ vytvoriť "data"
+cfgs = createConfigs(); % Vytvori configurace pro EKF
 
-cfg.prediction.imu = "IMU1";
+% prealokace vysledku
+results(numel(cfgs)) = struct();
+[results.name] = cfgs.name;
 
-cfg.update.gps  = true;
-cfg.update.baro = false;
-cfg.update.baro_id = 2;
-cfg.update.mag  = true;
-cfg.update.mag_id  = 2;
-
-[log, x_final, P_final] = runEKF(data, cfg);
-
+% iteruju EKF pro vsechny cfgs
+for i = 1:numel(cfgs)
+    [log, x_final, P_final] = runEKF(data, cfgs(i));
+    results(i).log = log;
+    results(i).x_final = x_final;
+    results(i).P_final = P_final;
+end
+save("ekfResults.mat","results")
 %% 3D POROVNANIE TRAJEKTÓRIE: EKF vs GPS
-
+% (pro 1. EKF)
 % --- GPS prepočet do lokálneho rámca (rovnaký ako v EKF) ---
 start_lat = data.GPS.Pos(1,1);
-start_lon = data.GPS.Pos(1,2);
+start_lon = datsa.GPS.Pos(1,2);
 start_alt = data.GPS.Pos(1,3);
 
 gps_x = (data.GPS.Pos(:,1) - start_lat) * 111132;
@@ -23,9 +26,9 @@ gps_y = (data.GPS.Pos(:,2) - start_lon) * 111132 * cosd(start_lat);
 gps_z = data.GPS.Pos(:,3) - start_alt;
 
 % --- EKF trajektória ---
-ekf_x = log.pos(:,1);
-ekf_y = log.pos(:,2);
-ekf_z = log.pos(:,3);
+ekf_x = results(1).log.pos(:,1);
+ekf_y = results(1).log.pos(:,2);
+ekf_z = results(1).log.pos(:,3);
 
 %% --- VYKRESLENIE ---
 figure('Name','3D Trajektória: EKF vs GPS','Color','w');

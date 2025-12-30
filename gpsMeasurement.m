@@ -8,7 +8,11 @@ x = (lat - lat0) * 111132;
 y = (lon - lon0) * 111132 * cosd(lat0);
 z = alt - alt0;
 
-Z = [x; y; z; data.GPS.Spd(k); 0; data.GPS.VZ(k)];
+course = data.GPS.GCRs(k);
+vx = data.GPS.Spd(k) * cosd(course); 
+vy = data.GPS.Spd(k) * sind(course); 
+
+Z = [x; y; z; vx; vy; data.GPS.VZ(k)];
 
 H = zeros(6,16);
 H(1:3,1:3) = eye(3);

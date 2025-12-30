@@ -35,11 +35,19 @@ Q = diag([ ...
     1e-7 1e-7 1e-7, ...
     1e-7 1e-7 1e-7]);
 
-var_gps_pos = data.GPS.Var_Pos(1);
+var_lat = data.GPS.Var_Pos(1);
+var_lon = data.GPS.Var_Pos(2);
+var_alt = data.GPS.Var_Pos(3);
+% Prevod lat/lon do metru
+scale_x = 111132;                 % m / deg (lat)
+scale_y = 111132 * cosd(start_lat);% 
 
 %% --- LOGOVANIE ---
 log.pos   = zeros(N,3);
 log.euler = zeros(N,3);
+log.nis.gps  = nan(N,1);
+log.nis.baro = nan(N,1);
+log.nis.mag  = nan(N,1);
 
 %% =================== HLAVNÁ SLUČKA ===================
 for k = 1:N
@@ -56,9 +64,10 @@ for k = 1:N
 
     % --- 2. KOREKCIA (GPS) ---
     if cfg.update.gps
-        R = diag([var_gps_pos, var_gps_pos, var_gps_pos*2, 0.2, 0.2, 0.2]);
+        R = diag([var_lat*scale_x^2, var_lon*scale_y^2, var_alt, 0.2, 0.2, 0.2]);
         [Z, H] = gpsMeasurement(data, k, start_lat, start_lon, start_alt);
-        [x, P] = ekfUpdate(x, P, Z, H, R);
+        [x, P, nis_gps] = ekfUpdate(x, P, Z, H, R);
+        log.nis.gps(k) = nis_gps;
     end
 
     % --- 3. KOREKCIA (BAROMETR) ---
@@ -72,7 +81,9 @@ for k = 1:N
         
         R = data.(baroName).Var_Alt;
 
-        [x, P] = ekfUpdate(x, P, Z, H, R);
+        [x, P, nis_baro] = ekfUpdate(x, P, Z, H, R);
+        log.nis.baro(k) = nis_baro;
+
     end
 
     % --- 4. KOREKCIA (MAGNETOMETER – YAW) ---
@@ -83,23 +94,35 @@ for k = 1:N
         m = m / norm(m);
         
         yaw_meas = atan2(m(2), m(1));   % zjednodušený heading
-        yaw_est  = quat2eul(x(7:10)');
-        yaw_est  = yaw_est(1);
-        
-        z = yaw_meas - yaw_est;
-        z = wrapToPi(z);
-        
+        yaw_est  = yawFromQuat(x(7:10));
+        nu = wrapToPi(yaw_meas - yaw_est);
+
+        % Numerická derivace yaw wrt quaternion
+        eps = 1e-6;
         H = zeros(1,16);
-        H(7:10) = [0 0 0 1];   % aproximácia vplyvu yaw
+        
+        q0 = x(7:10);
+        for i = 1:4
+            dq = zeros(4,1); dq(i) = eps;
+            qp = q0 + dq; qp = qp / norm(qp);
+            qm = q0 - dq; qm = qm / norm(qm);
+        
+            hp = yawFromQuat(qp);
+            hm = yawFromQuat(qm);
+        
+            d = wrapToPi(hp - hm) / (2*eps);
+            H(6+i) = d;  % indexy 7:10
+        end
         
         R = data.(magName).Var_Field(1);
         
-        [x, P] = ekfUpdate(x, P, z, H, R);
+        [x, P, nis_mag] = ekfUpdate(x, P, nu, H, R);
+        log.nis.mag(k) = nis_mag;
+
     end
 
     %% --- LOG ---
     log.pos(k,:)   = x(1:3)';
     log.euler(k,:) = quat2eul(x(7:10)');
-
 end
 end

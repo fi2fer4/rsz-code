@@ -48,9 +48,9 @@ R_gps = diag([var_gps_pos*scale_x^2, var_gps_pos*scale_y^2, var_gps_pos*2, 0.2, 
 log_pos = zeros(N, 3);
 log_euler = zeros(N, 3);
 % normalizovane residuum (ciste pro debug)
-% nis = zeros(N,1);
-% nis_pos = zeros(N,1);
-% nis_vel = zeros(N,1);
+nis = zeros(N,1);
+nis_pos = zeros(N,1);
+nis_vel = zeros(N,1);
 
 fprintf('Spúšťam 16-stavový EKF s plným Jacobiánom F...\n');
 
@@ -201,16 +201,19 @@ for k = 1:N
     x_new = x_pred + K * y_res;
     
 
-    % debug
-    % pos_res = y_res(1:3);
-    % vel_res = y_res(4:6);
-    % nis(k) = y_res' / S * y_res;
-    % y = y_res;
-    % Spos = S(1:3,1:3);   ypos = y(1:3);
-    % Svel = S(4:6,4:6);   yvel = y(4:6);
-    % 
-    % nis_pos(k) = ypos' / Spos * ypos;   % ~3
-    % nis_vel(k) = yvel' / Svel * yvel;
+    % debug (nis pro pos i vel)
+    pos_res = y_res(1:3);
+    vel_res = y_res(4:6);
+    nis(k) = y_res' / S * y_res;
+    y = y_res;
+    Spos = S(1:3,1:3);   ypos = y(1:3);
+    Svel = S(4:6,4:6);   yvel = y(4:6);
+
+    nis_pos(k) = ypos' / Spos * ypos;   % ~3
+    nis_vel(k) = yvel' / Svel * yvel;
+
+    % normalized innovation square pro hledani vadneho senzoru
+    % nis = y_res' / S * y_res;
 
 
     % Update P
